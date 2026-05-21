@@ -5,10 +5,10 @@ pydantic>=1.10,<3
 python-dotenv>=0.21
 
 # Optional / heavy dependencies (move to requirements-optional.txt)
-# plotly
-# streamlit-plotly-events
 # sentence-transformers
 # torch
- pydantic-settings>=1.0.0
+plotly
+streamlit-plotly-events
+pydantic-settings>=1.0.0
 scikit-learn
 requests>=2.28
