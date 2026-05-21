@@ -1,8 +1,4 @@
-try:
-    # pydantic v2.12 split BaseSettings into pydantic-settings package
-    from pydantic_settings import BaseSettings
-except Exception:
-    from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from pydantic import Field
 from pathlib import Path
 from typing import Optional
