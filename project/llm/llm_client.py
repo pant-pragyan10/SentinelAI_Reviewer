@@ -1,15 +1,23 @@
-"""OpenAI LLM client wrapper with JSON parsing and retry logic."""
+"""Lightweight LLM client with provider selection (Groq / OpenAI).
+
+This module implements a minimal Groq-backed client using `requests` and
+keeps OpenAI usage optional and lazy. When `LLM_PROVIDER` is set to "groq",
+the client will POST to the Groq inference endpoint using `GROQ_API_KEY` and
+`MODEL_NAME` environment variables. If `LLM_PROVIDER` is "openai", the OpenAI
+SDK will be imported lazily.
+
+If no provider is configured the client will raise at call-time so callers can
+fall back to demo behavior.
+"""
 import asyncio
 import json
+import os
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 from ..logging_config import get_logger
 from ..config import settings
-import openai
 
 logger = get_logger("sentinelai.llm.client")
-
-openai.api_key = settings.OPENAI_API_KEY or ""
 
 
 class LLMClient:
@@ -18,13 +26,31 @@ class LLMClient:
         self.max_retries = max_retries
 
     async def call(self, prompt: str, *, temperature: float = 0.0) -> Any:
-        """Call the LLM asynchronously and return parsed JSON output.
+        """Call the configured LLM provider and return parsed JSON output.
 
-        Retries when the model returns non-JSON or invalid JSON.
+        Supports `LLM_PROVIDER=groq` and `LLM_PROVIDER=openai` (optional).
         """
+        provider = os.environ.get("LLM_PROVIDER", "").strip().lower()
+        if provider == "groq":
+            return await self._call_groq(prompt)
+        if provider == "openai":
+            return await self._call_openai(prompt, temperature=temperature)
+
+        raise RuntimeError("No LLM provider configured (set LLM_PROVIDER). Running in demo/offline mode.")
+
+    async def _call_openai(self, prompt: str, *, temperature: float = 0.0) -> Any:
+        # Lazy import of openai to keep runtime lightweight when not used
+        try:
+            import openai
+        except Exception as e:
+            logger.error("OpenAI SDK not installed: %s", e)
+            raise
+
+        openai.api_key = os.environ.get("OPENAI_API_KEY", "") or settings.OPENAI_API_KEY or ""
+
         for attempt in range(1, self.max_retries + 1):
             try:
-                logger.debug("LLM call attempt %d", attempt)
+                logger.debug("OpenAI call attempt %d", attempt)
                 resp = await asyncio.to_thread(
                     lambda: openai.ChatCompletion.create(
                         model=self.model,
@@ -34,21 +60,61 @@ class LLMClient:
                     )
                 )
                 text = resp.choices[0].message.content
-                parsed = self._parse_json(text)
-                return parsed
+                return self._parse_json(text)
             except Exception as e:
-                logger.warning("LLM parse attempt %d failed: %s", attempt, e)
+                logger.warning("OpenAI attempt %d failed: %s", attempt, e)
                 if attempt == self.max_retries:
-                    logger.exception("LLM failed after retries")
+                    logger.exception("OpenAI failed after retries")
                     raise
-        raise RuntimeError("LLM call failed unexpectedly")
+
+    async def _call_groq(self, prompt: str) -> Any:
+        """Minimal Groq client using `requests`.
+
+        The endpoint URL is constructed as:
+          https://api.groq.com/v1/models/{MODEL_NAME}/generate
+
+        The response parsing is tolerant to several JSON shapes.
+        """
+        import requests
+
+        key = os.environ.get("GROQ_API_KEY")
+        model = os.environ.get("MODEL_NAME") or self.model
+        if not key:
+            raise RuntimeError("GROQ_API_KEY is not set for Groq provider")
+
+        url = f"https://api.groq.com/v1/models/{model}/generate"
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        payload = {"input": prompt}
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                logger.debug("Groq call attempt %d -> %s", attempt, url)
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+                # tolerant extraction of text
+                text = None
+                if isinstance(data, dict):
+                    # common keys
+                    text = data.get("output") or data.get("text") or data.get("generated_text")
+                    if not text and "choices" in data and data["choices"]:
+                        ch = data["choices"][0]
+                        text = ch.get("text") or ch.get("message", {}).get("content")
+                if text is None:
+                    # fallback: stringify JSON
+                    text = json.dumps(data)
+
+                return self._parse_json(text)
+            except Exception as e:
+                logger.warning("Groq attempt %d failed: %s", attempt, e)
+                if attempt == self.max_retries:
+                    logger.exception("Groq failed after retries")
+                    raise
 
     def _parse_json(self, text: str) -> Any:
-        # Try direct JSON
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # Try to extract JSON substring
             m = re.search(r"\{.*\}\s*$|\[.*\]\s*$", text, re.S)
             if m:
                 candidate = m.group(0)
@@ -56,5 +122,4 @@ class LLMClient:
                     return json.loads(candidate)
                 except Exception:
                     pass
-            # If all fails, raise
             raise ValueError("Failed to parse JSON from model output")
