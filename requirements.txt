@@ -11,3 +11,4 @@ python-dotenv>=0.21
 # torch
 openai>=1.0.0
 pydantic-settings>=1.0.0
+scikit-learn
