@@ -1,0 +1,5 @@
+# Optional/Heavy Dependencies
+plotly
+streamlit-plotly-events
+sentence-transformers
+torch

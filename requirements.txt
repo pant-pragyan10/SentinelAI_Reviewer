@@ -1,0 +1,11 @@
+streamlit>=1.20
+networkx>=3.0
+GitPython>=3.1.30
+pydantic>=1.10,<3
+python-dotenv>=0.21
+
+# Optional / heavy dependencies (move to requirements-optional.txt)
+# plotly
+# streamlit-plotly-events
+# sentence-transformers
+# torch

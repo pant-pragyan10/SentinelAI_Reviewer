@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtualenv
+venv/
+.venv/
+env/
+
+# Byte-compiled / optimized / DLL files
+*.egg-info/
+dist/
+build/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# macOS
+.DS_Store
+
+# Logs and temporary files
+.pytest_cache/
+.mypy_cache/
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Release artifacts
+release/
