@@ -3,6 +3,15 @@
 Provides multi-page UI, repository loader, and visualization hooks into the orchestrator.
 """
 from pathlib import Path
+
+# Ensure repository root is on sys.path so `import project...` works
+# when Streamlit runs this file directly (Streamlit sets sys.path[0]
+# to the app directory, which can make top-level package imports fail).
+import sys
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import streamlit as st
 from project.ui.components.metrics import metric_card
 from project.ui.components.issue_card import render_issue_card
